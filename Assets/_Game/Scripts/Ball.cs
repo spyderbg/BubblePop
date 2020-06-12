@@ -3,6 +3,7 @@ using DarkTonic.PoolBoss;
 using UnityEngine;
 using TMPro;
 using UnityConstants;
+using Random = UnityEngine.Random;
 
 public class Ball : MonoBehaviour
 {
@@ -80,6 +81,8 @@ public class Ball : MonoBehaviour
                 break;
             case BallState.Placeholder:
                 StatePlaceholder.SetActive(true);
+                StatePlaceholder.GetComponent<SpriteRenderer>().color = 
+                    World.Instance.BallLaunchPoint.GetComponent<Ball>().GetColor();
                 break;
             case BallState.Launch:
                 StateActive.SetActive(true);
