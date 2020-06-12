@@ -1,4 +1,5 @@
-﻿using UnityConstants;
+﻿using DarkTonic.PoolBoss;
+using UnityConstants;
 using UnityEngine;
 using Utils.Extensions;
 
@@ -20,36 +21,28 @@ public class DrawLine : MonoBehaviour
     [HideInInspector] private Vector3 LastPoint => Waypoints[2] != Waypoints[1] ? Waypoints[2] : Waypoints[2];
     
     private LineRenderer _lineRenderer;
-    private bool         _isMouseDown = false;
+    private bool         _isMouseDown;
+    private Vector3      _lastDirection;
     
-    private GameObject[,] _pointers;
-    private GameObject[,] _pointers2;
+    private LinePoint[]  _pointers;
+    private LinePoint[]  _pointers2;
     
    /////////////////////////////////////////////////////// 
     
-    Color col;
-    public GameObject pointer;
-
-    Vector3 lastMousePos;
-    private bool startAnim;
-
     private void Start()
     {
         _lineRenderer = GetComponent<LineRenderer>();
 
         Objects = new GameObject[20];
         Waypoints = new Vector3[World.Instance.MaxLinePoints];
-        _pointers = new GameObject[World.Instance.MaxLinePoints,15];
-        _pointers2 = new GameObject[World.Instance.MaxLinePoints,25];
+        _pointers = new LinePoint[15];
+        _pointers2 = new LinePoint[25];
 
-        World.Instance.TraceRaySimple(Vector3.zero, ref Waypoints);
+        World.Instance.TraceRaySimple(World.Instance.LaunchPosition, Vector3.zero, ref Waypoints);
         
-        for (var i = 0; i < World.Instance.MaxLinePoints; i++)
-        {
-            GeneratePoints(i);
-            GeneratePositionsPoints(Waypoints, i);
-            // HidePoints(i);
-        }
+        GeneratePoints();
+        UpdatePoints();
+        HidePoints();
     }
 
     #region MonoBahaviour methods
@@ -90,7 +83,8 @@ public class DrawLine : MonoBehaviour
         if(direction == Vector3.zero)
             HideAllPoints();
         else
-            DrawSimple(direction);
+            DrawAnimated(direction);
+            // DrawSimple(direction);
     }
 
     #endregion
@@ -101,106 +95,89 @@ public class DrawLine : MonoBehaviour
     
     #region Private methods
     
-    private void GetReversSquare(Vector2 firstPos, Vector2 endPos, int num)
+    private void GeneratePoints()
     {
-        Debug.DrawLine (firstPos, endPos);
+        var t = transform;
         
-        var hit = Physics2D.LinecastAll(firstPos, endPos, 1 << 10);
-        foreach (var item in hit)
+        for (var i = 0; i < _pointers.Length; i++)
         {
-            // if (item.collider.gameObject.GetComponent<Square>().Busy != null) continue;
-            
-            // mainscript.Instance.reverseMesh[num] = item.collider.GetComponent<Square>();
-                
-            Debug.DrawLine (firstPos, item.collider.transform.position, Color.green);
-                
-            return;
+            var go = PoolBoss.Spawn("pointer", t.position, t.rotation, t).gameObject;
+            _pointers[i] = go.GetComponentRequired<LinePoint>();
+            _pointers[i].State = LinePoint.LinePointState.Disabled;
         }
 
-        // mainscript.Instance.reverseMesh[num] = null;
-    }
-    
-    private void GeneratePoints(int num = 0)
-    {
-        for (var i = 0; i < _pointers.GetLength(1); i++)
+        for (var i = 0; i < _pointers2.Length; i++)
         {
-            _pointers[num, i] = Instantiate(pointer, transform.position, transform.rotation);
-            _pointers[num, i].transform.parent = transform;
-            _pointers[num, i].GetComponent<LinePoint>().Light.SetActive(false);
-            _pointers[num, i].GetComponent<LinePoint>().SetDraw(this);
-        }
-
-        for (var i = 0; i < _pointers2.GetLength(1); i++)
-        {
-            _pointers2[num, i] = Instantiate(pointer, transform.position, transform.rotation);
-            _pointers2[num, i].transform.parent = transform;
-            _pointers2[num, i].GetComponent<LinePoint>().Light.SetActive(false);
-            _pointers2[num, i].GetComponent<LinePoint>().SetDraw(this);
+            var go = PoolBoss.Spawn("pointer", t.position, t.rotation, t).gameObject;
+            _pointers2[i] = go.GetComponentRequired<LinePoint>();
+            _pointers2[i].State = LinePoint.LinePointState.Disabled;
         }
     }
 
-    private void GeneratePositionsPoints(Vector3[] waypoints, int num = 0)
+    private void UpdatePoints()
     {
-        // if (mainscript.Instance.boxCatapult.GetComponent<Square>().Busy != null)
-        {
-            // col = mainscript.Instance.boxCatapult.GetComponent<Square>().Busy.GetComponent<SpriteRenderer>().sprite
-                // .texture.GetPixelBilinear(0.6f, 0.6f);
-            col.a = 1;
-        }
+        HidePoints();
 
-        HidePoints(num);
-
-        var ab = (waypoints[1] - waypoints[0]).normalized;
-        for (var i = 0; i < _pointers.GetLength(1); i++)
+        // update points to first hit
+        var color = World.Instance.BallLaunchPoint.GetComponent<Ball>().GetColor();
+        var dir = (Waypoints[1] - Waypoints[0]).normalized;
+        var magnitude = (Waypoints[1] - Waypoints[0]).magnitude;
+        
+        for (var i = 0; i < _pointers.Length; i++)
         {
             var step = i / 1.5f;
-            var newPos = waypoints[0] + (step * ab);
-            if (step >= (waypoints[1] - waypoints[0]).magnitude)
-            {
-                newPos = waypoints[1];
-            }
+            var pos = Waypoints[0] + step * dir;
+            if (step >= magnitude)
+                pos = Waypoints[1];
 
-            _pointers[num, i].transform.position = newPos;
-            _pointers[num, i].GetComponent<SpriteRenderer>().enabled = true;
-            _pointers[num, i].GetComponent<SpriteRenderer>().color = col;
-            _pointers[num, i].GetComponent<LinePoint>().Light.SetActive(true);
-            _pointers[num, i].GetComponent<LinePoint>().StartPoint = _pointers[num, i].transform.position;
-            _pointers[num, i].GetComponent<LinePoint>().NextPoint = _pointers[num, i].transform.position;
+            _pointers[i].transform.position = pos;
+
+            var linePoint = _pointers[i];
+            linePoint.State = LinePoint.LinePointState.Enabled;
+            linePoint.PointColor = color;
+            linePoint.StartPoint = _pointers[i].transform.position;
+            linePoint.NextPoint =  _pointers[i].transform.position;
+            
             if (i > 0)
-                _pointers[num, i - 1].GetComponent<LinePoint>().NextPoint = _pointers[num, i].transform.position;
+                _pointers[i - 1].NextPoint = _pointers[i].transform.position;
         }
 
-        ab = (waypoints[2] - waypoints[1]).normalized;
-        for (var i = 0; i < World.Instance.MaxLinePoints; i++)
+        // update points on second line if exists
+        if (!HasBoardHit) return;
+
+        dir = (Waypoints[2] - Waypoints[1]).normalized;
+        magnitude = (Waypoints[1] - Waypoints[0]).magnitude;
+        
+        for (var i = 0; i < 3; i++)
         {
             var step = i / 2f;
-
-            if (step < (waypoints[2] - waypoints[1]).magnitude)
-            {
-                _pointers2[num, i].transform.position = waypoints[1] + (step * ab);
-                _pointers2[num, i].GetComponent<SpriteRenderer>().enabled = true;
-                _pointers2[num, i].GetComponent<SpriteRenderer>().color = col;
-                _pointers2[num, i].GetComponent<LinePoint>().Light.SetActive(true);
-                _pointers2[num, i].GetComponent<LinePoint>().StartPoint = _pointers2[num, i].transform.position;
-                _pointers2[num, i].GetComponent<LinePoint>().NextPoint = _pointers2[num, i].transform.position;
-                if (i > 0)
-                    _pointers2[num, i - 1].GetComponent<LinePoint>().NextPoint = _pointers2[num, i].transform.position;
-            }
+            if (!(step < magnitude)) 
+                continue;
+            
+            var linePoint = _pointers2[i];
+            linePoint.transform.position = Waypoints[1] + step * dir;
+            linePoint.State = LinePoint.LinePointState.Enabled;
+            linePoint.PointColor = color;
+            linePoint.StartPoint = _pointers2[i].transform.position;
+            linePoint.NextPoint = _pointers2[i].transform.position;
+            
+            if (i > 0)
+                _pointers2[i - 1].NextPoint = _pointers2[i].transform.position;
         }
     }
 
-    private void HidePoints(int num = 0)
+    private void HidePoints()
     {
-        for (var i = 0; i < _pointers.GetLength(1); i++)
+        for (var i = 0; i < _pointers.Length; i++)
         {
-            _pointers[num, i].GetComponent<SpriteRenderer>().enabled = false;
-            _pointers[num, i].GetComponent<LinePoint>().Light.SetActive(false);
+            _pointers[i].GetComponent<SpriteRenderer>().enabled = false;
+            _pointers[i].GetComponent<LinePoint>().Light.SetActive(false);
         }
 
-        for (var i = 0; i < _pointers2.GetLength(1); i++)
+        for (var i = 0; i < _pointers2.Length; i++)
         {
-            _pointers2[num, i].GetComponent<SpriteRenderer>().enabled = false;
-            _pointers2[num, i].GetComponent<LinePoint>().Light.SetActive(false);
+            _pointers2[i].GetComponent<SpriteRenderer>().enabled = false;
+            _pointers2[i].GetComponent<LinePoint>().Light.SetActive(false);
         }
     }
 
@@ -209,24 +186,16 @@ public class DrawLine : MonoBehaviour
         IsVisible = false;
         _lineRenderer.enabled = false;
 
-        // for (var i = 0; i < World.Instance.MaxLinePoints; i++)
-            // HidePoints(i);
+        HidePoints();
     }
 
     private void EnableBoostLight()
     {
-        for (var i = 0; i < World.Instance.MaxLinePoints; i++)
-        {
-            for (var j = 0; j < _pointers.GetLength(1); j++)
-            {
-                _pointers[i, j].GetComponent<LinePoint>().Light.SetActive(true);
-            }
+        for (var j = 0; j < _pointers.Length; j++)
+            _pointers[j].GetComponent<LinePoint>().Light.SetActive(true);
 
-            for (var j = 0; j < _pointers2.GetLength(1); j++)
-            {
-                _pointers2[i, j].GetComponent<LinePoint>().Light.SetActive(true);
-            }
-        }
+        for (var j = 0; j < _pointers2.Length; j++)
+            _pointers2[j].GetComponent<LinePoint>().Light.SetActive(true);
     }
 
     private void DrawSimple(Vector3 direction)
@@ -257,17 +226,31 @@ public class DrawLine : MonoBehaviour
     
     private void DrawAnimated(Vector3 direction)
     {
-        Debug.DrawLine(World.Instance.BallLaunchPoint.transform.position, direction, Color.green);
+        IsVisible = true;
         
-        direction.z = 0;
-        
-        startAnim = lastMousePos == direction;
-        lastMousePos = direction;
+        try {
+            ObjectsNum = World.Instance.TraceRay(World.Instance.LaunchPosition, direction, ref Waypoints, ref Objects);
+            // ObjectsNum = World.Instance.TraceRaySimple(World.Instance.LaunchPosition, direction, ref Waypoints);
+            for (var i = ObjectsNum - 1; i >= 0; i--)
+            {
+                var ball = Objects[i].GetComponent<Ball>();
+                if (ball == null || ball.GetState() == BallState.Active) 
+                    continue;
 
-        World.Instance.TraceRaySimple(direction, ref Waypoints);
+                if (Placeholder != null)
+                    Placeholder.GetComponent<Ball>().SetState(BallState.None);
+                    
+                Placeholder = ball.gameObject;
+                ball.SetState(BallState.Placeholder);
+                break;
+            }
+        }
+        catch {}
         
-        // if (!startAnim)
-            // GeneratePositionsPoints(Waypoints, 0);
+        if (_lastDirection != direction)
+            UpdatePoints();
+
+        _lastDirection = direction;
     }
 
     #endregion

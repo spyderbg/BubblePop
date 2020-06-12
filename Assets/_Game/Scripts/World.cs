@@ -105,7 +105,7 @@ public class World : MonoSingleton<World>
     {
         Random.InitState(1);
         
-        LoadLevel(Levels.Level_01);
+        LoadLevel(Levels.GetLevel(7));
         
         _tempBall = TempBall.GetComponentRequired<Ball>();
         _tempBall.SetState(BallState.None);
@@ -178,7 +178,6 @@ public class World : MonoSingleton<World>
                     var ac = EndGameText.GetComponent<Animation>();
                     if (!ac.isPlaying && Input.GetMouseButtonDown(0))
                         ac.Play("FadeOut");
-                    
                 }
                 else
                 {
@@ -291,15 +290,13 @@ public class World : MonoSingleton<World>
         return num;
     }
 
-    public RaycastHit2D[] TraceRaySimple(Vector3 direction, ref Vector3[] points)
+    public int TraceRaySimple(Vector3 origin, Vector3 direction, ref Vector3[] points)
     {
-        var hits = new RaycastHit2D[MaxLinePoints];
-
         points[0] = LaunchPosition;
         points[1] = new Vector3(2.5f, -0.5f, 0f);
         points[1] = new Vector3(-2.6f, 5f, 0f);
 
-        return hits;
+        return 0;
     }
     
     #endregion
