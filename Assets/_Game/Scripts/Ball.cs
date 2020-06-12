@@ -187,11 +187,6 @@ public class Ball : MonoBehaviour
         IsLinked = false;
     }
 
-    private void Update()
-    {
-        
-    }
-
     private void OnCollisionEnter2D(Collision2D other)
     {
         if (other.gameObject.layer != Layers.BottomBorder)

@@ -9,6 +9,7 @@ using UnityEngine;
 using UnityConstants;
 using DarkTonic.PoolBoss;
 using DG.Tweening;
+using UnityEngine.UI;
 using Utils;
 using Utils.Extensions;
 
@@ -42,11 +43,12 @@ public class World : MonoSingleton<World>
     public int Columns       = 6;
     public int MaxLinePoints = 3;
 
-    public Sprite[]   Sprites;
-    public GameObject BallLaunchPoint;
-    public GameObject BallNext;
-    public GameObject TempBall;
-    public DrawLine   Line;
+    public Sprite[]    Sprites;
+    public GameObject  BallLaunchPoint;
+    public GameObject  BallNext;
+    public GameObject  TempBall;
+    public DrawLine    Line;
+    public GameObject  EndGameText;
     
     public GameState  State;
 
@@ -55,7 +57,8 @@ public class World : MonoSingleton<World>
 
     #region Private fields
 
-    private Camera _camera;
+    private Camera       _camera;
+    private SoundManager _soundManager;
 
     private Ball[,] _board;
     private Ball    _tempBall;
@@ -102,8 +105,7 @@ public class World : MonoSingleton<World>
     {
         Random.InitState(1);
         
-        LoadLevel(Levels.Level_06);
-        // SetCollisionBalls();
+        LoadLevel(Levels.Level_01);
         
         _tempBall = TempBall.GetComponentRequired<Ball>();
         _tempBall.SetState(BallState.None);
@@ -128,18 +130,24 @@ public class World : MonoSingleton<World>
         {
             case GameState.Playing:
                 if (_wasLineVisible && !Line.IsVisible)
-                {
                     State = GameState.BallMoving;
-                }
                 _wasLineVisible = Line.IsVisible;
                 break;
             
             case GameState.BallDrawNext:
-                State = GameState.Waiting;
-                StartCoroutine(DrawNextBall());
+                if (IsGameFinished)
+                {
+                    State = GameState.Finished;
+                }
+                else
+                {
+                    State = GameState.Waiting;
+                    StartCoroutine(DrawNextBall());
+                }
                 break;
             
             case GameState.BallMoving:
+                SoundManager.Instance.PlayLaunch();
                 State = GameState.Waiting;
                 StartCoroutine(MoveBall());
                 break;
@@ -164,6 +172,24 @@ public class World : MonoSingleton<World>
                 StartCoroutine(MoveBoardDown());
                 break;
             
+            case GameState.Finished:
+                if (EndGameText.activeInHierarchy)
+                {
+                    var ac = EndGameText.GetComponent<Animation>();
+                    if (!ac.isPlaying && Input.GetMouseButtonDown(0))
+                        ac.Play("FadeOut");
+                    
+                }
+                else
+                {
+                    EndGameText.SetActive(true);
+                    
+                    var ac = EndGameText.GetComponent<Animation>();
+                    if (!ac.isPlaying)
+                        EndGameText.GetComponent<Animation>().Play("FadeIn");
+                }
+                break;
+            
             case GameState.Waiting:
                 break;
         }
@@ -177,6 +203,22 @@ public class World : MonoSingleton<World>
 
     public bool IsLineBlocked => State != GameState.Playing;
 
+    public void RestartGame()
+    {
+        EndGameText.SetActive(false);
+        LoadRandomLevel();
+        State = GameState.BallDrawNext;
+    }
+
+    public void LoadRandomLevel()
+    {
+        var level = Random.Range(1, 6);
+
+        Debug.Log($"Load level {level}");
+        
+        LoadLevel(Levels.GetLevel(level));
+    }
+    
     public void LoadLevel(int[,] level)
     {
         if(level == null) return;
@@ -264,6 +306,9 @@ public class World : MonoSingleton<World>
 
     #region Private methods
 
+    private bool IsGameFinished =>
+        _board.Cast<Ball>().Any(ball => ball.GetValue() == 512);
+    
     private IEnumerable<Vector2Int> GetNeighbors(int y) 
         => y.IsEven() ^ _isEvenLeft ? rightNeighbors : leftNeighbors;
     
@@ -335,19 +380,17 @@ public class World : MonoSingleton<World>
     private void ResetBoard(bool complete = false)
     {
         _isEvenLeft = true;
-        _board = new Ball[Rows, Columns];
+        if(_board == null)
+            _board = new Ball[Rows, Columns];
 
-        var stepX = CellWidth;
-        var stepY = CellHeight;
-        var startX = BoardLeft;
-        var startY = BoardTop + stepY; 
-
+        PoolBoss.DespawnAllPrefabs();
+        
         for (var y = 0; y < Rows; y++)
         {
-            var offsetX = y.IsEven() && _isEvenLeft ? 0f : stepX / 2; 
+            var offsetX = y.IsEven() && _isEvenLeft ? 0f : CellWidth / 2; 
             for(var x = 0; x < Columns; x++)
             {
-                var pos = new Vector3(startX + x * stepX + offsetX, startY - y * stepY, 0f);
+                var pos = new Vector3(BoardLeft + x * CellWidth + offsetX, BoardTop + CellHeight - y * CellHeight, 0f);
                 var ball = PoolBoss.SpawnInPool("ball", pos, Quaternion.identity).GetComponent<Ball>();
                 ball.BoardX = x;
                 ball.BoardY = y;
@@ -526,10 +569,7 @@ public class World : MonoSingleton<World>
                 continue;
 
             if (value == _board[pos.y, pos.x].GetValue())
-            {
-                Debug.Log($"merge pos: {pos}");
                 return _board[pos.y, pos.x];
-            }
         }
 
         return null;
@@ -540,6 +580,9 @@ public class World : MonoSingleton<World>
         var srcBall = placeholder;
         var dstBall = FindForMerge(srcBall);
         
+        if(dstBall != null)
+            SoundManager.Instance.PlayPop();
+            
         while(dstBall != null)
         {
             _tempBall.CopyFrom(srcBall);
@@ -581,6 +624,9 @@ public class World : MonoSingleton<World>
             ballFall.CopyFrom(ball);
             ballFall.SetState(BallState.Fall);
         }
+        
+        if(nextState == GameState.BoardMovingDown)
+            SoundManager.Instance.PlayFall();
 
         State = nextState;
         // State = GameState.BallDrawNext;
@@ -646,6 +692,6 @@ public class World : MonoSingleton<World>
         
         State = GameState.BallDrawNext;
     }
-    
+
     #endregion
 }

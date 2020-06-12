@@ -1,13 +1,14 @@
-﻿public static class Levels
+﻿
+using UnityEngine;
+
+public static class Levels
 {
     public static int[,] Level_01 => new int[,] {
         {2,  8,  4,  4,  4, 16},
-        {8,  8,  4,  4,  4, 16},
-        {4,  8, 16,  4, 16, 16},
-        {2,  0,  4,  4,  4, 16},
-        {4,  8, 32,  0, 32, 16},
-        {4,  8,  4,  0,  4, 16},
-        {16, 8,  4,  0,  4, 16},
+        {8,  4,  2,  4,  4, 32},
+        {64, 2, 16, 16, 32, 16},
+        {64, 32, 4,  2, 16,  2},
+        {32, 32, 16, 4, 64, 16}
     };
     
     public static int[,] Level_02 => new int[,] {
@@ -53,4 +54,22 @@
         {128, 256, 2, 256,  128, 128},
         { 2,  4,  8, 16, 32, 64},
     };
+
+    public static int[,] GetLevel(int level = 0)
+    {
+        if (level < 1 || level > 6)
+            level = Random.Range(1, 6);
+            
+        switch (level)
+        {
+            case 1: return Level_01;
+            case 2: return Level_02;
+            case 3: return Level_03;
+            case 4: return Level_04;
+            case 5: return Level_05;
+            case 6: return Level_06;
+        }
+
+        return null;
+    }
 }
